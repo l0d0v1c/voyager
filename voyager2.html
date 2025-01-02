@@ -49,50 +49,49 @@
 <body>
     <header>
         <h1>Voyager 2 Data Viewer</h1>
-        <p>Loading latest data from NASA...</p>
+        <p>Loading the latest data from NASA...</p>
     </header>
     <div id="dataContainer" class="data-container"></div>
 
     <script>
         async function fetchData() {
-    try {
-        const response = await fetch('https://voyager.org.men/voyager2.php');
-        const jsonData = await response.json();
+            try {
+                // Fetch JSON from the given URL
+                const response = await fetch('https://voyager.org.men/voyager2.php');
+                const jsonData = await response.json();
 
-        // Afficher le contenu brut de `result` dans la console
-        console.log('Raw result:', jsonData.result);
+                // Extract the `result` field
+                const rawData = jsonData.result;
 
-        const rawData = jsonData.result;
+                // Regular expression to extract relevant data
+                const regex = /(\d+\.\d+)\s+=\s+(.+?)\s+TDB\s+X\s+=\s+([^\s]+)\s+Y\s+=\s+([^\s]+)\s+Z\s+=\s+([^\s]+)/g;
+                const matches = [...rawData.matchAll(regex)];
 
-        // Régex pour analyser les données
-        const regex = /(\d+\.\d+)\s+=\s+([^\n]+)\n\s+X\s+=\s+([^\s]+)\s+Y\s+=\s+([^\s]+)\s+Z\s+=\s+([^\s]+)/g;
-        const matches = [...rawData.matchAll(regex)];
+                const container = document.getElementById('dataContainer');
+                container.innerHTML = ''; // Clear any existing content
 
-        const container = document.getElementById('dataContainer');
-        container.innerHTML = ''; // Effacer le contenu existant
+                if (matches.length > 0) {
+                    matches.forEach(match => {
+                        const [_, julianDate, date, x, y, z] = match;
 
-        if (matches.length > 0) {
-            matches.forEach(match => {
-                const [_, julianDate, date, x, y, z] = match;
-
-                const dataBlock = document.createElement('div');
-                dataBlock.className = 'data';
-                dataBlock.innerHTML = `
-                    <p><span class="label">Julian Date:</span> ${julianDate}</p>
-                    <p><span class="label">Date:</span> ${date}</p>
-                    <p><span class="label">Position:</span> X=${x}, Y=${y}, Z=${z}</p>
-                `;
-                container.appendChild(dataBlock);
-            });
-        } else {
-            container.innerHTML = '<p>No relevant data found in the response.</p>';
+                        const dataBlock = document.createElement('div');
+                        dataBlock.className = 'data';
+                        dataBlock.innerHTML = `
+                            <p><span class="label">Julian Date:</span> ${julianDate}</p>
+                            <p><span class="label">Date:</span> ${date}</p>
+                            <p><span class="label">Position:</span> X=${x}, Y=${y}, Z=${z}</p>
+                        `;
+                        container.appendChild(dataBlock);
+                    });
+                } else {
+                    container.innerHTML = '<p>No relevant data found in the response.</p>';
+                }
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                const container = document.getElementById('dataContainer');
+                container.innerHTML = '<p>Failed to load data. Please try again later.</p>';
+            }
         }
-    } catch (error) {
-        console.error('Error fetching data:', error);
-        const container = document.getElementById('dataContainer');
-        container.innerHTML = '<p>Failed to load data. Please try again later.</p>';
-    }
-}
 
         // Load data on page load
         fetchData();
