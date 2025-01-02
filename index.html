@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Voyager 2 AR + iOS Permission + Flèche</title>
+  <title>Voyager 2 AR + Flèche & Croix</title>
   <style>
     /* ----------- Style principal ----------- */
     html, body {
@@ -58,6 +58,7 @@
       border-radius: 50%;
       transform: translate(-20px, -20px);
       pointer-events: none;
+      display: none; /* cachée par défaut */
     }
     #target::before, #target::after {
       content: '';
@@ -75,19 +76,18 @@
       transform: translateX(-50%);
     }
 
-    /* ----------- Flèche (compas) au centre ----------- */
+    /* ----------- Flèche (véritable flèche en SVG) ----------- */
     #arrow {
       position: absolute;
       top: 50%; left: 50%;
-      width: 0; height: 0;
+      width: 60px; height: 60px; /* taille ajustable */
       transform: translate(-50%, -50%);
-      /* On dessine un triangle pointant vers le haut (border technique) */
-      border-left: 20px solid transparent;
-      border-right: 20px solid transparent;
-      border-bottom: 30px solid limegreen;
-      /* On peut ajuster la taille/couleur à volonté */
-      z-index: 999;
       pointer-events: none;
+      /* On utilise un background SVG inline (data URL) pour une "vraie flèche" */
+      background: url("data:image/svg+xml;charset=UTF-8,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='limegreen' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cline x1='12' y1='19' x2='12' y2='5'/%3E%3Cpolyline points='5 12 12 5 19 12'/%3E%3C/svg%3E") no-repeat center;
+      background-size: contain;
+      /* La rotation se fera en JS */
+      transform-origin: 50% 50%;
     }
 
     /* ----------- Panneau d'informations ----------- */
@@ -106,20 +106,18 @@
 </head>
 <body>
   <header>
-    <h2>Voyager 2 AR Demo (Flèche + Croix)</h2>
+    <h2>Voyager 2 AR Demo (Flèche & Croix)</h2>
   </header>
 
-  <!-- Bouton pour autoriser l'orientation (plein écran) -->
+  <!-- Bouton pour autoriser l'orientation (plein écran, iOS) -->
   <button id="btn-orientation">
     Cliquer pour autoriser l'orientation<br/>
     (iOS 13+ / Safari)
   </button>
 
-  <!-- Zone "scène" avec la croix AR -->
+  <!-- Zone "scène" avec la croix AR et la flèche permanente -->
   <div id="scene">
-    <!-- La croix rouge représentant la direction “exacte” de Voyager 2 en AR -->
     <div id="target"></div>
-    <!-- Flèche (compas) toujours au centre -->
     <div id="arrow"></div>
   </div>
 
@@ -150,7 +148,7 @@
 
       const xECEF = (N + altKm) * cosLat * Math.cos(lon);
       const yECEF = (N + altKm) * cosLat * Math.sin(lon);
-      const zECEF = (N*(1 - e2) + altKm) * sinLat;
+      const zECEF = (N * (1 - e2) + altKm) * sinLat;
 
       // Rotation approx. -23.4393° autour de X
       const eps = -23.4393 * deg2rad;
@@ -295,11 +293,11 @@
       requestAnimationFrame(animate);
       if (!v2PosEcl) return;
 
-      // Vecteur phone->V2
+      // 3.1) Vecteur phone->V2
       const phoneToV2 = Vec3.sub(v2PosEcl, phonePosEcl);
       const dir = Vec3.normalize(phoneToV2);
 
-      // On calcule un azimut/élévation simplifié (0°=+Y)
+      // Azimut/élévation simplifiés (0°=+Y)
       const az = Math.atan2(dir.x, dir.y);
       const el = Math.asin(dir.z);
 
@@ -316,36 +314,35 @@
       // Ecart d'élévation
       let relEl = el - (-pitchRad); // pitch>0 => penché vers le bas
 
-      // ---- 3.1) Affichage de la CROIX ----
+      // ---- 3.2) La flèche (compas) ----
+      // On veut qu'elle pointe "en haut" (0°) quand relAz=0 => angle = -relAz
+      const arrowDeg = -(relAz * 180 / Math.PI);
+      arrowEl.style.transform = `translate(-50%, -50%) rotate(${arrowDeg}deg)`;
+
+      // ---- 3.3) La croix (cible AR) ----
+      // Champ de vision ~60° horizontal (FOVx=0.6 rad), ~45° vertical (FOVy=0.45 rad)
       const FOVx = 0.6;   // ~60° horizontal
       const FOVy = 0.45;  // ~45° vertical
+      // Position 2D relative
       const rx = relAz / (FOVx/2);
-      const ry = -(relEl / (FOVy/2)); // inversion sur Y
+      const ry = -(relEl / (FOVy/2));
 
       const scrW = sceneEl.clientWidth;
       const scrH = sceneEl.clientHeight;
 
-      let px = scrW/2 + (scrW/2)*rx;
-      let py = scrH/2 + (scrH/2)*ry;
+      // On ne borne plus px/py ; on calcule direct
+      const px = scrW/2 + (scrW/2)*rx;
+      const py = scrH/2 + (scrH/2)*ry;
 
-      // Borne la croix à l'écran
-      if (px < 20) px = 20;
-      if (px > scrW - 20) px = scrW - 20;
-      if (py < 20) py = 20;
-      if (py > scrH - 20) py = scrH - 20;
-
-      targetEl.style.left = px + 'px';
-      targetEl.style.top  = py + 'px';
-
-      // ---- 3.2) Affichage de la FLECHE (compas) ----
-      // On souhaite que la flèche pointe "en haut" (0° de rotation) quand relAz=0
-      // => arrowAngle = -relAz (en degrés)
-      const arrowDeg = -(relAz * 180 / Math.PI);
-      arrowEl.style.transform = `translate(-50%, -50%) rotate(${arrowDeg}deg)`;
-      // On garde la flèche toujours au centre de l'écran
+      // => la croix n'apparaît QUE si on est dans l'écran
+      if (px < 0 || px > scrW || py < 0 || py > scrH) {
+        targetEl.style.display = 'none'; // hors champ => invisible
+      } else {
+        targetEl.style.display = 'block';
+        targetEl.style.left = px + 'px';
+        targetEl.style.top  = py + 'px';
+      }
     }
-
-    // Lancement de la boucle
     requestAnimationFrame(animate);
 
     /***********************************************
