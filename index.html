@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Voyager 2 - Démo</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background: #222; color: #fff;
+      font-family: sans-serif; overflow: hidden;
+    }
+    #info {
+      position: absolute;
+      top: 10px; left: 10px;
+      background: rgba(0,0,0,0.4);
+      padding: 10px; border-radius: 5px;
+      max-width: 80%;
+      font-size: 0.9em;
+    }
+    #sky {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      overflow: hidden;
+    }
+    #voyagerDot {
+      position: absolute;
+      width: 20px; height: 20px;
+      background-color: red;
+      border-radius: 50%;
+      transform: translate(-10px, -10px);
+      box-shadow: 0 0 10px red;
+      pointer-events: none;
+    }
+    .error {
+      color: #f66;
+    }
+  </style>
+</head>
+
+<body>
+<div id="info">
+  <p><strong>Démo Voyager 2</strong></p>
+  <p id="status">Chargement des données depuis la NASA…</p>
+  <p><em>Position de l’utilisateur</em>: <span id="latlon">En attente…</span></p>
+  <p><em>Orientation (α,β,γ)</em>: <span id="orientation">En attente…</span></p>
+  <p><em>Az/Alt Voyager 2</em>: <span id="azalt">–</span></p>
+  <p style="font-size:0.8em; color:#ccc;">
+    NB : code très simplifié. L’accès aux capteurs (GPS, boussole) peut nécessiter HTTPS et autorisation.
+  </p>
+</div>
+<div id="sky">
+  <div id="voyagerDot"></div>
+</div>
+
+<script>
+// -----------------------------------------------------------------------------
+// 1) Variables globales pour stocker la position de Voyager 2 en écliptique J2000
+//    (On les mettra à jour après avoir fetch le JSON Horizons).
+// -----------------------------------------------------------------------------
+let voyagerEclJ2000 = { x: 0, y: 0, z: 0 };
+
+// -----------------------------------------------------------------------------
+// 2) Récupération de la position de Voyager 2 via l’API Horizons (format JSON).
+//    L’API renvoie un gros bloc texte dans data.result qu’il faut parser pour
+//    extraire X, Y, Z.
+// -----------------------------------------------------------------------------
+async function fetchVoyagerData() {
+  const statusEl = document.getElementById('status');
+
+  try {
+    const url = "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND='-32'&TABLE_TYPE='VECTOR'&START_TIME='2022-Jan-01%2010:00'&STOP_TIME='2022-Jan-01%2011:00'&STEP_SIZE='1%20h'";
+    // ↑ Pour la démo, on fixe une plage d'une heure, le 1er Jan 2022, 10h→11h TDB
+    //   Vous pouvez adapter la date/heure selon vos besoins.
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error("Réponse réseau incorrecte");
+    }
+    const data = await response.json();
+
+    // data.result contient tout le tableau en texte brut.
+    // Nous allons chercher la ligne qui commence par " X ="
+    const lines = data.result.split("\n");
+
+    // Cherchons la ligne juste après $$SOE (premier bloc)
+    let startIndex = lines.findIndex(line => line.includes("$$SOE"));
+    // Normalement la 1ère ligne de données se trouve startIndex+1
+    let lineData = lines[startIndex + 1] || "";
+
+    // Exemple de ligne :
+    //  X = 5.363653570973994E+09 Y =-1.452217352525701E+10 Z =-1.172224070926574E+10
+    // On va extraire X, Y, Z avec une regex simple
+    const regexXYZ = /X\s*=\s*([\-\d.E+]+)\s*Y\s*=\s*([\-\d.E+]+)\s*Z\s*=\s*([\-\d.E+]+)/;
+    const match = lineData.match(regexXYZ);
+    if (match) {
+      voyagerEclJ2000.x = parseFloat(match[1]);
+      voyagerEclJ2000.y = parseFloat(match[2]);
+      voyagerEclJ2000.z = parseFloat(match[3]);
+
+      statusEl.textContent = "Données NASA chargées (exemple du 2022-01-01 10:00 TDB).";
+    } else {
+      throw new Error("Impossible de trouver X/Y/Z dans data.result");
+    }
+  } catch (err) {
+    console.error(err);
+    statusEl.innerHTML = '<span class="error">Erreur chargement API NASA : ' + err + '</span>';
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 3) Géolocalisation de l’utilisateur
+// -----------------------------------------------------------------------------
+let userLat = 0, userLon = 0;  // en radians
+
+function onGeoSuccess(pos) {
+  const { latitude, longitude } = pos.coords;
+  userLat = latitude * Math.PI/180.0;
+  userLon = longitude * Math.PI/180.0;
+  document.getElementById("latlon").textContent =
+    latitude.toFixed(5) + "°, " + longitude.toFixed(5) + "°";
+}
+function onGeoError(err) {
+  console.warn(err);
+  document.getElementById("latlon").textContent = "Erreur géoloc ou refusée.";
+}
+
+if ("geolocation" in navigator) {
+  navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, {
+    enableHighAccuracy: true
+  });
+} else {
+  document.getElementById("latlon").textContent = "Géoloc. non supportée.";
+}
+
+// -----------------------------------------------------------------------------
+// 4) Orientation du smartphone (alpha, beta, gamma)
+// -----------------------------------------------------------------------------
+let deviceAlpha = 0, deviceBeta = 0, deviceGamma = 0;
+
+function onDeviceOrientation(evt) {
+  deviceAlpha = evt.alpha  || 0;
+  deviceBeta  = evt.beta   || 0;
+  deviceGamma = evt.gamma  || 0;
+  document.getElementById("orientation").textContent =
+    `α=${deviceAlpha.toFixed(1)}°, β=${deviceBeta.toFixed(1)}°, γ=${deviceGamma.toFixed(1)}°`;
+}
+
+function requestDeviceOrientationIOS() {
+  if (typeof(DeviceOrientationEvent) !== 'undefined' &&
+      typeof(DeviceOrientationEvent.requestPermission) === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then((response) => {
+        if (response === 'granted') {
+          window.addEventListener('deviceorientation', onDeviceOrientation);
+        } else {
+          alert("Accès au capteur refusé.");
+        }
+      })
+      .catch(console.error);
+  } else {
+    window.addEventListener('deviceorientation', onDeviceOrientation);
+  }
+}
+document.body.addEventListener('click', requestDeviceOrientationIOS);
+document.body.addEventListener('touchstart', requestDeviceOrientationIOS);
+
+// -----------------------------------------------------------------------------
+// 5) Conversions astro simplifiées : écliptique (J2000) -> équatorial -> az/alt
+// -----------------------------------------------------------------------------
+const OBLIQ = 23.43928 * Math.PI/180.0; // obliquité approx
+
+function eclipticToEquatorial(ecl) {
+  // Rotation autour de l'axe X pour passer du plan écliptique -> plan équatorial
+  const cosO = Math.cos(OBLIQ);
+  const sinO = Math.sin(OBLIQ);
+
+  let xe = ecl.x;
+  let ye = ecl.y * cosO - ecl.z * sinO;
+  let ze = ecl.y * sinO + ecl.z * cosO;
+
+  const r = Math.sqrt(xe*xe + ye*ye + ze*ze);
+  let ra  = Math.atan2(ye, xe);   // en radians
+  let dec = Math.asin(ze / r);
+
+  return { ra, dec, r };
+}
+
+// Calcul AZ/ALT naïf (on triche sur le temps sidéral)
+function calcAzAlt(ra, dec, lat, lon) {
+  // On fait comme si LST = -lon (en radians), ce qui n'est pas correct en astro
+  const lst = -lon; 
+  const ha  = lst - ra; // hour angle
+
+  const sinAlt = Math.sin(lat)*Math.sin(dec) + Math.cos(lat)*Math.cos(dec)*Math.cos(ha);
+  const alt = Math.asin(sinAlt);
+
+  const sinAz = -Math.sin(ha) * Math.cos(dec) / Math.cos(alt);
+  const cosAz = (Math.sin(dec) - Math.sin(lat)*Math.sin(alt)) / (Math.cos(lat)*Math.cos(alt));
+  let az = Math.atan2(sinAz, cosAz);
+  if (az < 0) az += 2*Math.PI;
+
+  return { az, alt };
+}
+
+// -----------------------------------------------------------------------------
+// 6) Affichage du point de Voyager 2 sur le "ciel" 2D
+// -----------------------------------------------------------------------------
+const voyagerDot = document.getElementById("voyagerDot");
+const azaltEl = document.getElementById("azalt");
+
+function updateVoyagerDirection() {
+  // Convertir en équatorial
+  const eq = eclipticToEquatorial(voyagerEclJ2000);
+  // Calcul AZ/ALT
+  const aa = calcAzAlt(eq.ra, eq.dec, userLat, userLon);
+
+  // Affiche numeric
+  const azDeg  = aa.az  * 180/Math.PI;
+  const altDeg = aa.alt * 180/Math.PI;
+  azaltEl.textContent = `Az=${azDeg.toFixed(1)}°, Alt=${altDeg.toFixed(1)}°`;
+
+  // Projection 2D sur l'écran
+  const sky = document.getElementById("sky");
+  const w = sky.clientWidth;
+  const h = sky.clientHeight;
+  // On fait correspondre l'azimut 0..360° à x=0..w
+  let x = (azDeg / 360) * w;
+  // altitude -90..+90° => y= h..0 (pour avoir alt=90° en haut)
+  // => normalisation : altDeg + 90 => 0..180 => inverser
+  let y = (1 - ( (altDeg + 90) / 180)) * h;
+
+  // Borne
+  x = Math.max(0, Math.min(w, x));
+  y = Math.max(0, Math.min(h, y));
+
+  voyagerDot.style.left = x + "px";
+  voyagerDot.style.top  = y + "px";
+}
+
+// -----------------------------------------------------------------------------
+// 7) Boucle d'animation
+// -----------------------------------------------------------------------------
+function animate() {
+  updateVoyagerDirection();
+  requestAnimationFrame(animate);
+}
+
+// -----------------------------------------------------------------------------
+// 8) Lancement
+// -----------------------------------------------------------------------------
+(async function main(){
+  // 8.1 Récupérer la position de Voyager 2
+  await fetchVoyagerData();
+  // 8.2 Démarrer l'animation
+  requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>
