@@ -1,45 +1,37 @@
 <?php
-// Fonction pour obtenir l'URL formatée avec les dates actuelles
-function getHorizonsApiUrl() {
-    $startTime = date('Y-M-d H:i', strtotime('today 10:00'));
-    $stopTime = date('Y-M-d H:i', strtotime('today 11:00'));
+// Obtenir la date actuelle
+$today = date('Y-M-d');
 
-    return "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND='-32'&TABLE_TYPE='VECTOR'&START_TIME='" . urlencode($startTime) . "'&STOP_TIME='" . urlencode($stopTime) . "'&STEP_SIZE='1%20h'";
-}
+// Construire les paramètres dynamiques de l'URL
+$startTime = urlencode("$today 10:00");
+$stopTime = urlencode("$today 11:00");
 
-// Obtenir l'URL
-$url = getHorizonsApiUrl();
+// Construire l'URL de l'API
+$url = "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND='-32'&TABLE_TYPE='VECTOR'&START_TIME='$startTime'&STOP_TIME='$stopTime'&STEP_SIZE='1%20h'";
 
-// Initialiser la session cURL
+// Initialiser cURL
 $ch = curl_init();
 
-// Configurer les options de cURL
+// Configurer cURL
 curl_setopt($ch, CURLOPT_URL, $url);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
-// Exécuter la requête
+// Exécuter la requête et récupérer le JSON brut
 $response = curl_exec($ch);
 
-// Vérifier les erreurs
+// Gérer les erreurs éventuelles
 if (curl_errno($ch)) {
-    echo "Erreur : " . curl_error($ch);
+    echo "Erreur de cURL : " . curl_error($ch);
+    curl_close($ch);
     exit;
 }
 
 // Fermer la session cURL
 curl_close($ch);
 
-// Décoder la réponse JSON
-$data = json_decode($response, true);
-
-// Afficher les données
-if ($data) {
-    echo "<pre>";
-    print_r($data);
-    echo "</pre>";
-} else {
-    echo "Impossible de décoder le JSON.";
-}
+// Afficher directement le JSON brut
+header('Content-Type: application/json');
+echo $response;
 ?>

@@ -69,9 +69,8 @@ async function fetchVoyagerData() {
   const statusEl = document.getElementById('status');
 
   try {
-    const url = "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND='-32'&TABLE_TYPE='VECTOR'&START_TIME='2022-Jan-01%2010:00'&STOP_TIME='2022-Jan-01%2011:00'&STEP_SIZE='1%20h'";
-    // ↑ Pour la démo, on fixe une plage d'une heure, le 1er Jan 2022, 10h→11h TDB
-    //   Vous pouvez adapter la date/heure selon vos besoins.
+    const url = "https://voyager.org.men";
+
 
     const response = await fetch(url);
     if (!response.ok) {
