@@ -76,16 +76,18 @@
     }*/
 
    #target {
-  position: absolute;
-  width: 40px;       /* même taille qu’avant */
-  height: 40px;
-  transform: translate(-20px, -20px); 
-  pointer-events: none;
+      position: absolute;
+      width: 20vmin;  
+      height: 20vmin; 
+      pointer-events: none;
+      
+      /* On la centre sur son "point central" */
+      transform: translate(-50%, -50%);
 
-  /* Affiche le fichier cross.svg au centre de l’élément */
-  background: url("voy.svg") no-repeat center; 
-  background-size: contain; /* adapte l'icône à la zone 40×40 */
-}
+      /* On suppose un fichier cross.svg, de couleur rouge par ex. */
+      background: url("voy.svg") no-repeat center;
+      background-size: contain;
+    }
 
     /* ----------- Flèche (SVG) au centre ----------- */
   
@@ -93,8 +95,8 @@
     #arrow {
   position: absolute;
   top: 50%; left: 50%;
-  width: 120px;    /* au lieu de 60px */
-  height: 120px;   /* au lieu de 60px */
+  width: 20vmin;
+  height: 20vmin;
   transform: translate(-50%, -50%);
   pointer-events: none;
   /* On va remplacer le SVG ci-dessous */
