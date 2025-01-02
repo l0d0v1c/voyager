@@ -2,145 +2,254 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Voyager 2 - Données de position et vitesse</title>
+  <title>Voyager 2 - Coordonnées</title>
   <style>
-    /* Un peu de style CSS pour rendre la page plus jolie */
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      background: #f6f7fb;
+    /* =========================
+       STYLES GLOBAUX
+       ========================= */
+    html, body {
+      margin: 0; padding: 0;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      background: linear-gradient(to right, #89f7fe, #66a6ff);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    h1 {
-      text-align: center;
-      color: #333;
-    }
-    #data-container {
+    header, main, footer {
+      width: 100%;
       max-width: 1200px;
       margin: 0 auto;
-      background: #fff;
-      padding: 15px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
+    header {
+      text-align: center;
+      padding: 20px 0;
+      color: #333;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 2rem;
+      font-weight: 600;
+    }
+    footer {
+      text-align: center;
+      margin-top: auto;
+      padding: 10px 0;
+      color: #444;
+    }
+    /* =========================
+       CONTENEUR PRINCIPAL
+       ========================= */
+    #data-container {
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(10px);
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.2);
+      margin: 20px;
+      padding: 20px;
+      overflow-x: auto; /* Pour scroll horizontal si tableau large */
+    }
+    /* =========================
+       TABLES
+       ========================= */
     table {
       width: 100%;
       border-collapse: collapse;
       margin: 20px 0;
+      min-width: 900px; /* si on veut un min de large */
     }
     th, td {
       border: 1px solid #ccc;
-      text-align: left;
-      padding: 8px;
-      vertical-align: middle;
+      padding: 10px;
+      text-align: right;
     }
     th {
-      background-color: #eaeaea;
+      background-color: #fafafa;
+      text-align: center;
     }
     tr:hover {
-      background-color: #f1f1f1;
+      background-color: #f5f5f5;
+      transition: background-color 0.2s ease;
+    }
+    caption {
+      caption-side: top;
+      font-weight: bold;
+      font-size: 1.1rem;
+      text-align: left;
+      margin-bottom: 8px;
     }
     .timestamp {
+      text-align: center;
       font-weight: bold;
+      color: #444;
+    }
+    .loading, .error {
       color: #555;
+      font-style: italic;
+    }
+    .error {
+      color: red;
+    }
+    /* =========================
+       PETITES ANIMATIONS
+       ========================= */
+    .fade-in {
+      animation: fadeIn 0.8s ease forwards;
+      opacity: 0;
+    }
+    @keyframes fadeIn {
+      to { opacity: 1; }
     }
   </style>
 </head>
 <body>
-  <h1>Voyager 2 - Données (JPL Horizons)</h1>
-  <div id="data-container">
-    <p>Chargement des données en cours…</p>
-    <!-- Le tableau sera inséré ici en JavaScript -->
-  </div>
+  <header>
+    <h1>Voyager 2 - Données JPL Horizons</h1>
+  </header>
+
+  <main>
+    <div id="data-container">
+      <p class="loading">Chargement des données en cours…</p>
+    </div>
+  </main>
+
+  <footer>
+    <small>Exemple démo - Conversion simplifiée</small>
+  </footer>
 
   <script>
-    // Fonction principale qui se lance au chargement du script
+    /***********************************************************
+     * 1) Fonction de conversion lat/lon/alt -> vecteur ecliptique (approx.)
+     *    ---------------------------------------------------------------
+     *   - On calcule d’abord le vecteur ECEF (équatorial, Terre rotée)
+     *   - On applique ensuite une rotation ~ -23.44° sur l’axe X
+     *     pour approx. passer du plan équatorial au plan écliptique.
+     *   - NB: Ceci est simplifié : l’axe X n’est pas exactement
+     *         l’axe d’inclinaison. En vrai, on doit tenir compte
+     *         du temps sidéral, etc. Mais c’est déjà une démo indicative !
+     ***********************************************************/
+    function geodeticToEcliptic(latDeg, lonDeg, altMeters = 0) {
+      // 1. Conversion degrés -> radians
+      const lat = latDeg * Math.PI / 180.0;
+      const lon = lonDeg * Math.PI / 180.0;
+      // 2. Paramètres WGS84 approximés (en km)
+      const a = 6378.137;             // demi-grand axe (km)
+      const e2 = 6.69437999014e-3;    // excentricité²
+      const altKm = altMeters / 1000; // altitude en km
+
+      // 3. Rayon normal
+      const sinLat = Math.sin(lat);
+      const cosLat = Math.cos(lat);
+      const N = a / Math.sqrt(1 - e2 * sinLat * sinLat);
+
+      // 4. Coordonnées ECEF (approx.)
+      const xECEF = (N + altKm) * cosLat * Math.cos(lon);
+      const yECEF = (N + altKm) * cosLat * Math.sin(lon);
+      const zECEF = ((1 - e2) * N + altKm) * sinLat;
+
+      // 5. Rotation ECEF -> Ecliptique (approx.)
+      //    On fait pivoter autour de l'axe X de -23.4393° (obliquité)
+      const eps = -23.4393 * Math.PI / 180.0;
+      const cosEps = Math.cos(eps);
+      const sinEps = Math.sin(eps);
+
+      //  x' = x
+      //  y' = y*cos(eps) - z*sin(eps)
+      //  z' = y*sin(eps) + z*cos(eps)
+      const xEcl = xECEF;
+      const yEcl = yECEF * cosEps - zECEF * sinEps;
+      const zEcl = yECEF * sinEps + zECEF * cosEps;
+
+      return { xEcl, yEcl, zEcl };
+    }
+
+    /***********************************************************
+     * 2) Récupération et parsing du fichier Horizons
+     *    + Préparation des tableaux
+     ***********************************************************/
     document.addEventListener('DOMContentLoaded', async () => {
       const container = document.getElementById('data-container');
+
+      // Pour stocker la position locale (x,y,z) => déterminée plus tard
+      let localPosEcliptic = { xEcl: 0, yEcl: 0, zEcl: 0 }; 
+      let hasLocalPosition = false;
+
       try {
-        // 1. Récupération du contenu brut depuis l'URL
+        // 2.1) On essaye de récupérer la géolocalisation depuis le navigateur
+        //      (la requête sera async, on la laisse tourner en background)
+        navigator.geolocation?.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude, altitude } = pos.coords;
+            // altitude peut être null selon les navigateurs => on met 0 si manquante
+            const altOk = altitude !== null ? altitude : 0;
+            localPosEcliptic = geodeticToEcliptic(latitude, longitude, altOk);
+            hasLocalPosition = true;
+          },
+          (err) => {
+            console.warn('Géolocalisation refusée ou indisponible.', err);
+          },
+          { enableHighAccuracy: true, timeout: 5000 }
+        );
+
+        // 2.2) Récupération du contenu brut depuis l'URL
         const response = await fetch('https://voyager.org.men/voyager2.php');
         if (!response.ok) {
           throw new Error(`Erreur HTTP : ${response.status}`);
         }
         const rawText = await response.text();
 
-        // 2. Extraction du bloc entre $$SOE et $$EOE
-        //    On veut isoler uniquement les lignes de données.
+        // 2.3) Extraction du bloc entre $$SOE et $$EOE
         const soeIndex = rawText.indexOf('$$SOE');
         const eoeIndex = rawText.indexOf('$$EOE');
-
         if (soeIndex === -1 || eoeIndex === -1) {
           throw new Error('Impossible de trouver le bloc $$SOE ... $$EOE dans la réponse.');
         }
+        const dataBlock = rawText.substring(soeIndex + 5, eoeIndex).trim();
 
-        const dataBlock = rawText
-          .substring(soeIndex + 5, eoeIndex) // on enlève le "##SOE"
-          .trim();
+        // 2.4) Séparer en “chunks” par date
+        const lines = dataBlock
+          .split('\n')
+          .map(l => l.trim())
+          .filter(l => l.length > 0);
 
-        // 3. Séparer ce bloc en “chunks” correspondant à chaque timestamp
-        //    Chaque chunk contient environ 4 lignes :
-        //    1) La date + TDB
-        //    2) X, Y, Z
-        //    3) VX, VY, VZ
-        //    4) LT, RG, RR
-        //    On va repérer les lignes qui commencent par un nombre ou un espace.
-        const lines = dataBlock.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-        // Pour simplifier : on découpe quand on détecte un pattern de date JD
-        // (ex: "2460677.916666667 = A.D. 2025-Jan-02 10:00:00.0000 TDB")
         let chunks = [];
         let currentChunk = [];
-
         lines.forEach(line => {
-          // Si la ligne ressemble à un début de bloc (contient "= A.D.")
-          // on démarre un nouveau chunk
           if (line.includes('= A.D.')) {
-            // push le chunk précédent s'il existe
+            // Nouveau bloc
             if (currentChunk.length > 0) chunks.push(currentChunk);
-            // nouveau chunk
             currentChunk = [line];
           } else {
-            // on ajoute au chunk courant
             currentChunk.push(line);
           }
         });
-        // push le dernier chunk
         if (currentChunk.length > 0) chunks.push(currentChunk);
 
-        // 4. Parser chaque chunk pour en extraire les valeurs
+        // 2.5) Parser chaque chunk
+        function parseTriplet(lineStr, keys = ['X','Y','Z']) {
+          let obj = {};
+          if (!lineStr) return obj;
+          keys.forEach(k => {
+            const regex = new RegExp(`${k}\\s*=\\s*([+\\-0-9.E]+)`);
+            const match = lineStr.match(regex);
+            if (match) {
+              obj[k] = parseFloat(match[1]);
+            }
+          });
+          return obj;
+        }
         const parsedData = chunks.map(ch => {
-          // ch[0] ressemble à :
-          // "2460677.916666667 = A.D. 2025-Jan-02 10:00:00.0000 TDB"
+          // Ex: "2460677.916666667 = A.D. 2025-Jan-02 10:00:00.0000 TDB"
           const [jdPart, datePart] = ch[0].split('=').map(x => x.trim());
-          const julianDay = jdPart; // ex: "2460677.916666667"
-          const dateTDB = datePart.replace('TDB', '').trim(); 
-          // ex: "A.D. 2025-Jan-02 10:00:00.0000"
+          const julianDay = jdPart;
+          const dateTDB = datePart.replace('TDB', '').trim();
 
-          // ch[1] : "X = 5.766643000313046E+09 Y =-1.540739873910786E+10 Z =-1.279671229111096E+10"
-          // on va repérer X, Y, Z
           const xyzLine = ch.find(l => l.startsWith('X =') || l.startsWith('X='));
           const vxvyvzLine = ch.find(l => l.startsWith('VX='));
           const ltrgrrLine = ch.find(l => l.startsWith('LT='));
 
-          // petite fonction de parsing d'un bloc "KEY= valeur"
-          function parseTriplet(lineStr, keys = ['X', 'Y', 'Z']) {
-            let obj = {};
-            if (!lineStr) return obj;
-            // on coupe sur les espaces "key = value"
-            // ou on utilise une regexp
-            keys.forEach(k => {
-              const regex = new RegExp(`${k}\\s*=\\s*([+\\-0-9.E]+)`);
-              const match = lineStr.match(regex);
-              if (match) {
-                obj[k] = match[1];
-              }
-            });
-            return obj;
-          }
-
-          const xyz = parseTriplet(xyzLine, ['X', 'Y', 'Z']);
-          const vxyz = parseTriplet(vxvyvzLine, ['VX', 'VY', 'VZ']);
-          const others = parseTriplet(ltrgrrLine, ['LT', 'RG', 'RR']);
+          const xyz = parseTriplet(xyzLine, ['X','Y','Z']);
+          const vxyz = parseTriplet(vxvyvzLine, ['VX','VY','VZ']);
+          const others = parseTriplet(ltrgrrLine, ['LT','RG','RR']);
 
           return {
             julianDay,
@@ -151,13 +260,20 @@
           };
         });
 
-        // 5. Générer un tableau HTML pour afficher ces données
-        let htmlTable = `
+        // 3) Construction des deux tableaux
+        //    ------------------------------
+        //    (A) Tableau centré Terre (0,0,0)
+        //    (B) Tableau centré sur l’observateur local (approx.)
+        let html = '<div class="fade-in">';
+
+        // 3A) Tableau #1 : Positions centrées Terre (comme Horizons le fournit)
+        html += `
           <table>
+            <caption>Coordonnées : Observateur à (lat=0, lon=0, alt=0)</caption>
             <thead>
               <tr>
                 <th>Date TDB (JD)</th>
-                <th>Date TDB (calendaire)</th>
+                <th>Date (calendaire)</th>
                 <th>X (km)</th>
                 <th>Y (km)</th>
                 <th>Z (km)</th>
@@ -171,33 +287,72 @@
             </thead>
             <tbody>
         `;
-
         parsedData.forEach(row => {
-          htmlTable += `
+          html += `
             <tr>
               <td class="timestamp">${row.julianDay}</td>
               <td class="timestamp">${row.dateTDB}</td>
-              <td>${row.X || ''}</td>
-              <td>${row.Y || ''}</td>
-              <td>${row.Z || ''}</td>
-              <td>${row.VX || ''}</td>
-              <td>${row.VY || ''}</td>
-              <td>${row.VZ || ''}</td>
-              <td>${row.LT || ''}</td>
-              <td>${row.RG || ''}</td>
-              <td>${row.RR || ''}</td>
+              <td>${row.X?.toExponential(6)}</td>
+              <td>${row.Y?.toExponential(6)}</td>
+              <td>${row.Z?.toExponential(6)}</td>
+              <td>${row.VX?.toFixed(6)}</td>
+              <td>${row.VY?.toFixed(6)}</td>
+              <td>${row.VZ?.toFixed(6)}</td>
+              <td>${row.LT?.toFixed(2)}</td>
+              <td>${row.RG?.toExponential(6)}</td>
+              <td>${row.RR?.toFixed(6)}</td>
             </tr>
           `;
         });
+        html += `</tbody></table>`;
 
-        htmlTable += `</tbody></table>`;
+        // 3B) Tableau #2 : Si on dispose de la position locale => position relative
+        html += `
+          <table>
+            <caption>Coordonnées : Observateur local (GPS) <br/>
+              <small style="font-weight:normal;">
+                (Approx. conversion lat/lon/alt -> ecliptique J2000)
+              </small>
+            </caption>
+            <thead>
+              <tr>
+                <th>Date TDB (JD)</th>
+                <th>Date (calendaire)</th>
+                <th>X' (km)</th>
+                <th>Y' (km)</th>
+                <th>Z' (km)</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
 
-        // 6. Insertion dans le container
-        container.innerHTML = htmlTable;
+        parsedData.forEach(row => {
+          // On soustrait (xObs, yObs, zObs) => (X', Y', Z') = (X - xObs, Y - yObs, Z - zObs)
+          // NB: S’il n’y a pas de position locale, on mettra '---'.
+          let Xprime = '---', Yprime = '---', Zprime = '---';
+          if (hasLocalPosition) {
+            Xprime = (row.X - localPosEcliptic.xEcl).toExponential(6);
+            Yprime = (row.Y - localPosEcliptic.yEcl).toExponential(6);
+            Zprime = (row.Z - localPosEcliptic.zEcl).toExponential(6);
+          }
+
+          html += `
+            <tr>
+              <td class="timestamp">${row.julianDay}</td>
+              <td class="timestamp">${row.dateTDB}</td>
+              <td>${Xprime}</td>
+              <td>${Yprime}</td>
+              <td>${Zprime}</td>
+            </tr>
+          `;
+        });
+        html += `</tbody></table></div>`;
+
+        // On insère le tout dans la page
+        container.innerHTML = html;
 
       } catch (error) {
-        // Affichage d'un message d'erreur si besoin
-        container.innerHTML = `<p style="color:red;">Erreur lors du chargement ou parsing des données : ${error}</p>`;
+        container.innerHTML = `<p class="error">Erreur lors du chargement ou parsing des données : ${error}</p>`;
         console.error(error);
       }
     });
