@@ -33,7 +33,8 @@
       align-items: center;
       background: #fff;
       z-index: 9999;
-      font-size: 22px;
+      font-size: 32px;
+      font-weight:bold;
       color: #333;
       text-align: center;
       border: none;
@@ -126,13 +127,13 @@
 </head>
 <body>
   <header>
-    <h2>Voyager AR Demo (API: azimut.php)</h2>
+    <h2>Trouver Voyager 2</h2>
   </header>
 
   <!-- Bouton autorisation iOS -->
   <button id="btn-orientation">
     Cliquer pour autoriser l'orientation<br/>
-    (iOS 13+ / Safari)
+    (iOS / Safari)
   </button>
 
   <!-- Scène -->
@@ -145,7 +146,7 @@
   <div id="info">
     <p><strong>Orientation téléphone</strong> : <span id="orient-data">En attente…</span></p>
     <p><strong>Coord. GPS</strong> : <span id="gps-data">En attente…</span></p>
-    <p><strong>Azimut/Altitude V2</strong> : <span id="az-alt-data">?</span></p>
+    <p><strong>Azimut/Altitude</strong> : <span id="az-alt-data">?</span></p>
   </div>
 
   <script>
