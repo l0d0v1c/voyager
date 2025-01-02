@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Voyager AR (azimut.php)</title>
+  <title>Voyager 2</title>
   <style>
     /* ----------- Style principal ----------- */
    html, body {
@@ -48,7 +48,7 @@
       overflow: hidden;
     }
 
-    /* ----------- Croix (cible) ----------- */
+    /* ----------- Croix (cible) ----------- 
     #target {
       position: absolute;
       width: 40px; height: 40px;
@@ -57,7 +57,7 @@
       border-radius: 50%;
       transform: translate(-20px, -20px);
       pointer-events: none;
-      display: none; /* cachée si hors champ */
+      display: none; 
     }
     #target::before, #target::after {
       content: '';
@@ -73,7 +73,19 @@
       left: 50%; top: 0;
       width: 2px; height: 100%;
       transform: translateX(-50%);
-    }
+    }*/
+
+   #target {
+  position: absolute;
+  width: 40px;       /* même taille qu’avant */
+  height: 40px;
+  transform: translate(-20px, -20px); 
+  pointer-events: none;
+
+  /* Affiche le fichier cross.svg au centre de l’élément */
+  background: url("voy.svg") no-repeat center; 
+  background-size: contain; /* adapte l'icône à la zone 40×40 */
+}
 
     /* ----------- Flèche (SVG) au centre ----------- */
   
