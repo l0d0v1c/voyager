@@ -272,7 +272,7 @@
       let relAz = arrowDeg; // c'est déjà (az - heading)
       // Ecart d'altitude : targetAlt - phonePitch
       // phonePitch=0 => mobile horizontal
-      let relEl = targetAlt - phonePitch;
+      let relEl = targetAlt - (90-phonePitch);
 
       // Si la cible est hors FOV, on cache la croix
       if (Math.abs(relAz) > FOVx || Math.abs(relEl) > FOVy) {
