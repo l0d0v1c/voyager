@@ -7,7 +7,7 @@ $startTime = urlencode("$today 10:00");
 $stopTime = urlencode("$today 11:00");
 
 // Construire l'URL de l'API
-$url = "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND='-32'&TABLE_TYPE='VECTOR'&START_TIME='$startTime'&STOP_TIME='$stopTime'&STEP_SIZE='1%20h'";
+$url = "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND='-32'&TABLE_TYPE='VECTOR'&START_TIME='$startTime'&STOP_TIME='$stopTime'&STEP_SIZE='1%20h'";
 
 // Initialiser cURL
 $ch = curl_init();
