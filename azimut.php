@@ -1,4 +1,5 @@
 <?php
+header('Content-type: text/plain');
 // Vérifier que le paramètre SITE_COORD est passé dans l'URL
 if (!isset($_GET['SITE_COORD']) || empty($_GET['SITE_COORD'])) {
     die("Erreur : Le paramètre 'SITE_COORD' est obligatoire.");
@@ -61,6 +62,6 @@ if ($full === 'NO') {
     echo "Aucune donnée trouvée après $$SOE.";
 } else {
     // Afficher toute la réponse si FULL=YES
-    echo "<pre>" . htmlspecialchars($response) . "</pre>";
+    echo htmlspecialchars($response);
 }
 ?>
