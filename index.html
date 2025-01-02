@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Voyager 2 AR + iOS Permission</title>
+  <title>Voyager 2 AR + iOS Permission + Flèche</title>
   <style>
     /* ----------- Style principal ----------- */
     html, body {
@@ -23,6 +23,24 @@
       z-index: 10;
     }
 
+    /* ----------- Bouton iOS plein écran ----------- */
+    #btn-orientation {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #fff;
+      z-index: 9999;
+      font-size: 22px;
+      color: #333;
+      text-align: center;
+      border: none;
+      cursor: pointer;
+    }
+
+    /* ----------- Zone "scène" plein écran ----------- */
     #scene {
       width: 100vw;
       height: 100vh;
@@ -30,7 +48,7 @@
       overflow: hidden;
     }
 
-    /* ----------- Croix (cible) ----------- */
+    /* ----------- Croix (cible AR) ----------- */
     #target {
       position: absolute;
       width: 40px;
@@ -57,6 +75,21 @@
       transform: translateX(-50%);
     }
 
+    /* ----------- Flèche (compas) au centre ----------- */
+    #arrow {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 0; height: 0;
+      transform: translate(-50%, -50%);
+      /* On dessine un triangle pointant vers le haut (border technique) */
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-bottom: 30px solid limegreen;
+      /* On peut ajuster la taille/couleur à volonté */
+      z-index: 999;
+      pointer-events: none;
+    }
+
     /* ----------- Panneau d'informations ----------- */
     #info {
       position: absolute;
@@ -69,65 +102,57 @@
       margin: 0;
       line-height: 1.4em;
     }
-
-    /* Bouton iOS */
-    #btn-orientation {
-      position: absolute;
-      top: 50px; left: 50%; transform: translateX(-50%);
-      z-index: 999;
-      font-size: 16px;
-      padding: 8px 16px;
-      background: #fff;
-      border: 1px solid #ccc;
-      cursor: pointer;
-    }
   </style>
 </head>
 <body>
   <header>
-    <h2>Voyager 2 AR Demo (avec permission iOS)</h2>
+    <h2>Voyager 2 AR Demo (Flèche + Croix)</h2>
   </header>
 
-  <!-- Bouton pour autoriser l'orientation iOS -->
-  <button id="btn-orientation">Autoriser l'Orientation (iOS)</button>
+  <!-- Bouton pour autoriser l'orientation (plein écran) -->
+  <button id="btn-orientation">
+    Cliquer pour autoriser l'orientation<br/>
+    (iOS 13+ / Safari)
+  </button>
 
-  <!-- Zone "scène" -->
+  <!-- Zone "scène" avec la croix AR -->
   <div id="scene">
-    <!-- La croix rouge représentant la direction de Voyager 2 -->
+    <!-- La croix rouge représentant la direction “exacte” de Voyager 2 en AR -->
     <div id="target"></div>
+    <!-- Flèche (compas) toujours au centre -->
+    <div id="arrow"></div>
   </div>
 
-  <!-- Zone d'infos en bas -->
+  <!-- Zone d'infos en bas (GPS, orientation, position V2) -->
   <div id="info">
-    <p><strong>Orientation téléphone</strong> : <span id="orient-data">En attente...</span></p>
+    <p><strong>Orientation téléphone</strong> : <span id="orient-data">En attente…</span></p>
     <p><strong>Position phone (lat, lon, alt)</strong> : <span id="gps-data">En attente…</span></p>
     <p><strong>Position Voyager 2 (Ecl. J2000)</strong> : <span id="v2-data">?</span></p>
   </div>
 
   <script>
     /***********************************************
-     * 0) Constantes / utilitaires
+     * 0) Constantes / utilitaires math
      ***********************************************/
-    const deg2rad = Math.PI / 180.0;
+    const deg2rad = Math.PI / 180;
 
-    // Conversion géodésique -> ECEF -> Ecliptique (approx.)
     function geodeticToEcliptic(latDeg, lonDeg, altMeters = 0) {
+      // Simplifié : lat/lon -> ECEF -> rotation obliquité => ecliptique
       const lat = latDeg * deg2rad;
       const lon = lonDeg * deg2rad;
-      const a = 6378.137;          // demi-grand axe
-      const e2 = 6.69437999014e-3; // excentricité²
+      const a = 6378.137; // demi-grand axe Terre (km)
+      const e2 = 6.69437999014e-3;
       const altKm = altMeters / 1000;
 
       const sinLat = Math.sin(lat);
       const cosLat = Math.cos(lat);
       const N = a / Math.sqrt(1 - e2 * sinLat * sinLat);
 
-      // ECEF
       const xECEF = (N + altKm) * cosLat * Math.cos(lon);
       const yECEF = (N + altKm) * cosLat * Math.sin(lon);
-      const zECEF = ((1 - e2) * N + altKm) * sinLat;
+      const zECEF = (N*(1 - e2) + altKm) * sinLat;
 
-      // Rotation ~ -23.4393° autour de X pour Ecliptique
+      // Rotation approx. -23.4393° autour de X
       const eps = -23.4393 * deg2rad;
       const cosEps = Math.cos(eps);
       const sinEps = Math.sin(eps);
@@ -144,13 +169,12 @@
       length: (v) => Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z),
       normalize: (v) => {
         const len = Vec3.length(v);
-        if (len === 0) return { x: 0, y: 0, z: 0 };
-        return { x: v.x/len, y: v.y/len, z: v.z/len };
-      },
+        return len ? { x: v.x/len, y: v.y/len, z: v.z/len } : { x:0, y:0, z:0 };
+      }
     };
 
     /***********************************************
-     * 1) Récupération position Voyager 2
+     * 1) Récupération position de Voyager 2
      ***********************************************/
     let v2PosEcl = null;
 
@@ -159,20 +183,20 @@
         const resp = await fetch('https://voyager.org.men/voyager2.php');
         const text = await resp.text();
 
-        // Extraction $$SOE / $$EOE
+        // Extraction du bloc $$SOE ... $$EOE
         const soeIdx = text.indexOf('$$SOE');
         const eoeIdx = text.indexOf('$$EOE');
-        if (soeIdx < 0 || eoeIdx < 0) throw new Error("Bloc $$SOE/$$EOE non trouvé.");
+        if (soeIdx < 0 || eoeIdx < 0) throw new Error("Bloc $$SOE/$$EOE introuvable");
 
         const dataBlock = text.substring(soeIdx + 5, eoeIdx).trim();
-        const lines = dataBlock.split('\n').map(l => l.trim()).filter(l => l);
+        const lines = dataBlock.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-        // On prend le PREMIER chunk
+        // On prend le premier chunk
         let firstChunk = [];
         let inChunk = false;
         for (const line of lines) {
           if (line.includes('= A.D.')) {
-            if (inChunk) break;
+            if (inChunk) break; // on avait déjà un chunk
             firstChunk.push(line);
             inChunk = true;
           } else if (inChunk) {
@@ -180,7 +204,7 @@
           }
         }
 
-        // Petite fonction de parsing
+        // Parse
         function parseTriplet(str, keys=['X','Y','Z']) {
           const out = {};
           keys.forEach(k => {
@@ -190,7 +214,6 @@
           });
           return out;
         }
-
         const xyzLine = firstChunk.find(l => l.startsWith('X =') || l.startsWith('X='));
         if (!xyzLine) throw new Error("Impossible de trouver la ligne X= ... Y= ... Z=");
         const xyz = parseTriplet(xyzLine);
@@ -207,10 +230,10 @@
     /***********************************************
      * 2) Position & Orientation du téléphone
      ***********************************************/
-    let phonePosEcl = { x:0, y:0, z:0 }; // position en Ecliptique
-    let phoneHeading = 0;  // alpha
-    let phonePitch = 0;    // beta
-    let phoneRoll = 0;     // gamma
+    let phonePosEcl = { x:0, y:0, z:0 };
+    let phoneHeading = 0; // alpha
+    let phonePitch = 0;   // beta
+    let phoneRoll = 0;    // gamma
 
     // 2.1) Géolocalisation
     navigator.geolocation?.getCurrentPosition(
@@ -225,29 +248,29 @@
         console.warn("Géoloc refusée ou indisponible.", err);
         document.getElementById('gps-data').textContent = "Géoloc refusée ou indispo.";
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 15000 }
     );
 
-    // 2.2) Fonctions pour demander la permission (iOS >= 13)
+    // 2.2) Autorisation orientation iOS (bouton)
     function startDeviceOrientation() {
-      // On écoute l'orientation
       window.addEventListener('deviceorientation', (event) => {
-        phoneHeading = event.alpha || 0;
-        phonePitch = event.beta || 0;
-        phoneRoll = event.gamma || 0;
-
+        phoneHeading = event.alpha ?? 0;
+        phonePitch = event.beta ?? 0;
+        phoneRoll = event.gamma ?? 0;
         document.getElementById('orient-data').textContent =
           `alpha=${phoneHeading.toFixed(1)}, beta=${phonePitch.toFixed(1)}, gamma=${phoneRoll.toFixed(1)}`;
       }, true);
     }
 
     async function requestOrientationPermission() {
+      // iOS 13+
       if (typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
           const resp = await DeviceOrientationEvent.requestPermission();
           if (resp === 'granted') {
             startDeviceOrientation();
-            alert("Orientation autorisée !");
+            // Cache le bouton
+            document.getElementById('btn-orientation').style.display = 'none';
           } else {
             alert("Permission refusée ou ignorée.");
           }
@@ -255,51 +278,53 @@
           console.error("Erreur requestPermission:", e);
         }
       } else {
-        // Sur Android / iOS < 13
+        // Android ou iOS < 13
         startDeviceOrientation();
+        document.getElementById('btn-orientation').style.display = 'none';
       }
     }
 
     /***********************************************
-     * 3) “Réalité augmentée” simplifiée
+     * 3) AR simplifiée : la croix & la flèche
      ***********************************************/
-    const targetEl = document.getElementById('target');
     const sceneEl = document.getElementById('scene');
+    const targetEl = document.getElementById('target');
+    const arrowEl  = document.getElementById('arrow');
 
     function animate() {
       requestAnimationFrame(animate);
-      if (!v2PosEcl) return; // On attend la pos V2
+      if (!v2PosEcl) return;
 
-      // 3.1) Vecteur phone -> Voyager2
+      // Vecteur phone->V2
       const phoneToV2 = Vec3.sub(v2PosEcl, phonePosEcl);
       const dir = Vec3.normalize(phoneToV2);
 
-      // 3.2) Az, El dans repère Ecliptique
-      // az = atan2(X, Y) ; 0° = +Y
-      // el = asin(Z)
+      // On calcule un azimut/élévation simplifié (0°=+Y)
       const az = Math.atan2(dir.x, dir.y);
       const el = Math.asin(dir.z);
 
-      // 3.3) Orientation du phone
+      // Orientation phone
       const headingRad = phoneHeading * deg2rad; // alpha
-      const pitchRad   = phonePitch  * deg2rad; // beta
+      const pitchRad   = phonePitch  * deg2rad;  // beta
 
-      // Diff d'azimut
+      // Ecart d'azimut
       let relAz = az - headingRad;
+      // Ramène relAz dans [-pi, pi]
       if (relAz > Math.PI) relAz -= 2*Math.PI;
       if (relAz < -Math.PI) relAz += 2*Math.PI;
 
-      // Diff d'élévation (simplifiée)
+      // Ecart d'élévation
       let relEl = el - (-pitchRad); // pitch>0 => penché vers le bas
 
-      // 3.4) Projection 2D simplifiée
-      const FOVx = 0.6;   // ~60° horizontaux
-      const FOVy = 0.45;  // ~45° verticaux
+      // ---- 3.1) Affichage de la CROIX ----
+      const FOVx = 0.6;   // ~60° horizontal
+      const FOVy = 0.45;  // ~45° vertical
       const rx = relAz / (FOVx/2);
-      const ry = -(relEl / (FOVy/2));
+      const ry = -(relEl / (FOVy/2)); // inversion sur Y
 
       const scrW = sceneEl.clientWidth;
       const scrH = sceneEl.clientHeight;
+
       let px = scrW/2 + (scrW/2)*rx;
       let py = scrH/2 + (scrH/2)*ry;
 
@@ -311,7 +336,16 @@
 
       targetEl.style.left = px + 'px';
       targetEl.style.top  = py + 'px';
+
+      // ---- 3.2) Affichage de la FLECHE (compas) ----
+      // On souhaite que la flèche pointe "en haut" (0° de rotation) quand relAz=0
+      // => arrowAngle = -relAz (en degrés)
+      const arrowDeg = -(relAz * 180 / Math.PI);
+      arrowEl.style.transform = `translate(-50%, -50%) rotate(${arrowDeg}deg)`;
+      // On garde la flèche toujours au centre de l'écran
     }
+
+    // Lancement de la boucle
     requestAnimationFrame(animate);
 
     /***********************************************
@@ -321,7 +355,8 @@
       requestOrientationPermission();
     });
 
-    fetchVoyagerPosition(); // Lance le fetch de la position de V2
+    // On charge la position de V2
+    fetchVoyagerPosition();
   </script>
 </body>
 </html>
