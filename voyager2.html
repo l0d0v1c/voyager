@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voyager 2 Data</title>
+    <title>Voyager 2 Data Viewer</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -30,6 +30,7 @@
             border-radius: 10px;
             width: 90%;
             max-width: 600px;
+            overflow-x: auto;
         }
         .data {
             margin-bottom: 10px;
@@ -47,37 +48,45 @@
 </head>
 <body>
     <header>
-        <h1>Voyager 2 Data</h1>
-        <p>Fetching the latest data from NASA's Horizons API...</p>
+        <h1>Voyager 2 Data Viewer</h1>
+        <p>Loading latest data from NASA...</p>
     </header>
     <div id="dataContainer" class="data-container"></div>
 
     <script>
         async function fetchData() {
             try {
+                // Fetch JSON from the given URL
                 const response = await fetch('https://voyager.org.men/voyager2.php');
                 const jsonData = await response.json();
 
-                const result = jsonData.result;
-                const matches = result.match(/2460677\.\d+\s+=\s+([^\n]+)\n\s+X\s+=\s+([^\s]+)\s+Y\s+=\s+([^\s]+)\s+Z\s+=\s+([^\s]+)/g);
+                // Extract the `result` field which contains the raw data
+                const rawData = jsonData.result;
 
+                // Regular expression to match the data lines
+                const regex = /(\d+\.\d+)\s+=\s+([^\n]+)\n\s+X\s+=\s+([^\s]+)\s+Y\s+=\s+([^\s]+)\s+Z\s+=\s+([^\s]+)/g;
+                const matches = [...rawData.matchAll(regex)];
+
+                // Container for displaying the data
                 const container = document.getElementById('dataContainer');
                 container.innerHTML = ''; // Clear any existing content
 
-                if (matches) {
-                    matches.forEach((line) => {
-                        const [_, date, x, y, z] = line.match(/2460677\.\d+\s+=\s+([^\n]+)\n\s+X\s+=\s+([^\s]+)\s+Y\s+=\s+([^\s]+)\s+Z\s+=\s+([^\s]+)/);
+                // Process each match and display it
+                if (matches.length > 0) {
+                    matches.forEach(match => {
+                        const [_, julianDate, date, x, y, z] = match;
 
                         const dataBlock = document.createElement('div');
                         dataBlock.className = 'data';
                         dataBlock.innerHTML = `
+                            <p><span class="label">Julian Date:</span> ${julianDate}</p>
                             <p><span class="label">Date:</span> ${date}</p>
                             <p><span class="label">Position:</span> X=${x}, Y=${y}, Z=${z}</p>
                         `;
                         container.appendChild(dataBlock);
                     });
                 } else {
-                    container.innerHTML = '<p>No data found in the JSON response.</p>';
+                    container.innerHTML = '<p>No relevant data found in the response.</p>';
                 }
             } catch (error) {
                 console.error('Error fetching data:', error);
@@ -86,6 +95,7 @@
             }
         }
 
+        // Load data on page load
         fetchData();
     </script>
 </body>
