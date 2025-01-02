@@ -255,7 +255,7 @@
       //    phoneHeading = 0 => nord, l'azimut = 0 => nord
       // => angle à appliquer = (targetAz - phoneHeading)
       // On veut un angle en degrés (CSS rotate)
-      let arrowDeg = targetAz - phoneHeading;
+      let arrowDeg = -(targetAz - phoneHeading);
       // On ramène dans [-180..180] si besoin
       while (arrowDeg > 180) arrowDeg -= 360;
       while (arrowDeg < -180) arrowDeg += 360;
