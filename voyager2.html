@@ -55,45 +55,44 @@
 
     <script>
         async function fetchData() {
-            try {
-                // Fetch JSON from the given URL
-                const response = await fetch('https://voyager.org.men/voyager2.php');
-                const jsonData = await response.json();
+    try {
+        const response = await fetch('https://voyager.org.men/voyager2.php');
+        const jsonData = await response.json();
 
-                // Extract the `result` field which contains the raw data
-                const rawData = jsonData.result;
+        // Afficher le contenu brut de `result` dans la console
+        console.log('Raw result:', jsonData.result);
 
-                // Regular expression to match the data lines
-                const regex = /(\d+\.\d+)\s+=\s+([^\n]+)\n\s+X\s+=\s+([^\s]+)\s+Y\s+=\s+([^\s]+)\s+Z\s+=\s+([^\s]+)/g;
-                const matches = [...rawData.matchAll(regex)];
+        const rawData = jsonData.result;
 
-                // Container for displaying the data
-                const container = document.getElementById('dataContainer');
-                container.innerHTML = ''; // Clear any existing content
+        // Régex pour analyser les données
+        const regex = /(\d+\.\d+)\s+=\s+([^\n]+)\n\s+X\s+=\s+([^\s]+)\s+Y\s+=\s+([^\s]+)\s+Z\s+=\s+([^\s]+)/g;
+        const matches = [...rawData.matchAll(regex)];
 
-                // Process each match and display it
-                if (matches.length > 0) {
-                    matches.forEach(match => {
-                        const [_, julianDate, date, x, y, z] = match;
+        const container = document.getElementById('dataContainer');
+        container.innerHTML = ''; // Effacer le contenu existant
 
-                        const dataBlock = document.createElement('div');
-                        dataBlock.className = 'data';
-                        dataBlock.innerHTML = `
-                            <p><span class="label">Julian Date:</span> ${julianDate}</p>
-                            <p><span class="label">Date:</span> ${date}</p>
-                            <p><span class="label">Position:</span> X=${x}, Y=${y}, Z=${z}</p>
-                        `;
-                        container.appendChild(dataBlock);
-                    });
-                } else {
-                    container.innerHTML = '<p>No relevant data found in the response.</p>';
-                }
-            } catch (error) {
-                console.error('Error fetching data:', error);
-                const container = document.getElementById('dataContainer');
-                container.innerHTML = '<p>Failed to load data. Please try again later.</p>';
-            }
+        if (matches.length > 0) {
+            matches.forEach(match => {
+                const [_, julianDate, date, x, y, z] = match;
+
+                const dataBlock = document.createElement('div');
+                dataBlock.className = 'data';
+                dataBlock.innerHTML = `
+                    <p><span class="label">Julian Date:</span> ${julianDate}</p>
+                    <p><span class="label">Date:</span> ${date}</p>
+                    <p><span class="label">Position:</span> X=${x}, Y=${y}, Z=${z}</p>
+                `;
+                container.appendChild(dataBlock);
+            });
+        } else {
+            container.innerHTML = '<p>No relevant data found in the response.</p>';
         }
+    } catch (error) {
+        console.error('Error fetching data:', error);
+        const container = document.getElementById('dataContainer');
+        container.innerHTML = '<p>Failed to load data. Please try again later.</p>';
+    }
+}
 
         // Load data on page load
         fetchData();
