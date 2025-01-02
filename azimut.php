@@ -1,8 +1,7 @@
 <?php
-header('Content-type: text/plain');
 // Vérifier que le paramètre SITE_COORD est passé dans l'URL
 if (!isset($_GET['SITE_COORD']) || empty($_GET['SITE_COORD'])) {
-    die("Erreur : Le paramètre 'SITE_COORD' est obligatoire.");
+    die("Erreur : Le paramètre 'SITE_COORD' est obligatoire.\n");
 }
 
 // Récupérer les coordonnées du site
@@ -42,7 +41,7 @@ curl_close($ch);
 
 // Vérification de la réponse
 if ($response === false) {
-    die("Erreur : Impossible de récupérer les données depuis Horizons.");
+    die("Erreur : Impossible de récupérer les données depuis Horizons.\n");
 }
 
 // Traiter les données en fonction de l'option FULL
@@ -55,13 +54,13 @@ if ($full === 'NO') {
             continue; // Passer à la ligne suivante après $$SOE
         }
         if ($soe_found) {
-            echo "<pre>" . htmlspecialchars($line) . "</pre>";
+            echo $line . "\n"; // Sortie de la première ligne après $$SOE
             exit; // Arrêter après la première ligne
         }
     }
-    echo "Aucune donnée trouvée après $$SOE.";
+    echo "Aucune donnée trouvée après $$SOE.\n";
 } else {
-    // Afficher toute la réponse si FULL=YES
-    echo htmlspecialchars($response);
+    // Sortie de la réponse complète si FULL=YES
+    echo $response;
 }
 ?>
