@@ -316,7 +316,7 @@
 
       // ---- 3.2) La flèche (compas) ----
       // On veut qu'elle pointe "en haut" (0°) quand relAz=0 => angle = -relAz
-      const arrowDeg = -(relAz * 180 / Math.PI);
+      const arrowDeg = +(relAz * 180 / Math.PI);
       arrowEl.style.transform = `translate(-50%, -50%) rotate(${arrowDeg}deg)`;
 
       // ---- 3.3) La croix (cible AR) ----
