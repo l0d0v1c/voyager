@@ -1,150 +1,206 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Voyager 2 Data Viewer</title>
+  <meta charset="UTF-8" />
+  <title>Voyager 2 - Données de position et vitesse</title>
   <style>
+    /* Un peu de style CSS pour rendre la page plus jolie */
     body {
       font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-      background: #1e1e2f;
-      color: #ffffff;
+      margin: 20px;
+      background: #f6f7fb;
     }
-
-    .container {
-      max-width: 900px;
-      margin: 50px auto;
-      padding: 20px;
-      background: #2a2a3c;
-      border-radius: 10px;
-      box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5);
-    }
-
     h1 {
       text-align: center;
-      margin-bottom: 20px;
+      color: #333;
     }
-
+    #data-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
     table {
       width: 100%;
       border-collapse: collapse;
       margin: 20px 0;
     }
-
-    table th, table td {
-      padding: 12px 15px;
-      text-align: center;
+    th, td {
+      border: 1px solid #ccc;
+      text-align: left;
+      padding: 8px;
+      vertical-align: middle;
     }
-
-    table th {
-      background-color: #3a3a4f;
-      color: #f1c40f;
+    th {
+      background-color: #eaeaea;
     }
-
-    table tr:nth-child(even) {
-      background-color: #3a3a4f;
+    tr:hover {
+      background-color: #f1f1f1;
     }
-
-    table tr:nth-child(odd) {
-      background-color: #2a2a3c;
-    }
-
-    .btn {
-      display: block;
-      margin: 20px auto;
-      padding: 10px 20px;
-      font-size: 16px;
-      color: #ffffff;
-      background-color: #3498db;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      text-align: center;
-    }
-
-    .btn:hover {
-      background-color: #2980b9;
+    .timestamp {
+      font-weight: bold;
+      color: #555;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Voyager 2 Data Viewer</h1>
-    <button class="btn" onclick="loadData()">Load Data</button>
-    <table id="dataTable">
-      <thead>
-        <tr>
-          <th>Time (TDB)</th>
-          <th>X (km)</th>
-          <th>Y (km)</th>
-          <th>Z (km)</th>
-          <th>VX (km/s)</th>
-          <th>VY (km/s)</th>
-          <th>VZ (km/s)</th>
-          <th>RG (km)</th>
-          <th>RR (km/s)</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+  <h1>Voyager 2 - Données (JPL Horizons)</h1>
+  <div id="data-container">
+    <p>Chargement des données en cours…</p>
+    <!-- Le tableau sera inséré ici en JavaScript -->
   </div>
 
   <script>
-    async function loadData() {
-      const url = 'https://voyager.org.men/voyager2.php';
+    // Fonction principale qui se lance au chargement du script
+    document.addEventListener('DOMContentLoaded', async () => {
+      const container = document.getElementById('data-container');
       try {
-        const response = await fetch(url);
-        const text = await response.text();
-        const data = parseData(text);
-        populateTable(data);
-      } catch (error) {
-        alert('Failed to fetch data: ' + error.message);
-      }
-    }
-
-    function parseData(text) {
-      const data = [];
-      const rows = text.split('$$SOE')[1].split('$$EOE')[0].trim().split('\n');
-      rows.forEach(row => {
-        const match = row.match(/(\d+(\.\d+)?E[+-]\d+|\d+(\.\d+)?)/g);
-        if (match && match.length >= 9) {
-          data.push({
-            time: row.split('=')[1].trim().split(' ')[0],
-            x: match[0],
-            y: match[1],
-            z: match[2],
-            vx: match[3],
-            vy: match[4],
-            vz: match[5],
-            rg: match[7],
-            rr: match[8],
-          });
+        // 1. Récupération du contenu brut depuis l'URL
+        const response = await fetch('https://voyager.org.men/voyager2.php');
+        if (!response.ok) {
+          throw new Error(`Erreur HTTP : ${response.status}`);
         }
-      });
-      return data;
-    }
+        const rawText = await response.text();
 
-    function populateTable(data) {
-      const tableBody = document.querySelector('#dataTable tbody');
-      tableBody.innerHTML = '';
-      data.forEach(row => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${row.time}</td>
-          <td>${row.x}</td>
-          <td>${row.y}</td>
-          <td>${row.z}</td>
-          <td>${row.vx}</td>
-          <td>${row.vy}</td>
-          <td>${row.vz}</td>
-          <td>${row.rg}</td>
-          <td>${row.rr}</td>
+        // 2. Extraction du bloc entre $$SOE et $$EOE
+        //    On veut isoler uniquement les lignes de données.
+        const soeIndex = rawText.indexOf('$$SOE');
+        const eoeIndex = rawText.indexOf('$$EOE');
+
+        if (soeIndex === -1 || eoeIndex === -1) {
+          throw new Error('Impossible de trouver le bloc $$SOE ... $$EOE dans la réponse.');
+        }
+
+        const dataBlock = rawText
+          .substring(soeIndex + 5, eoeIndex) // on enlève le "##SOE"
+          .trim();
+
+        // 3. Séparer ce bloc en “chunks” correspondant à chaque timestamp
+        //    Chaque chunk contient environ 4 lignes :
+        //    1) La date + TDB
+        //    2) X, Y, Z
+        //    3) VX, VY, VZ
+        //    4) LT, RG, RR
+        //    On va repérer les lignes qui commencent par un nombre ou un espace.
+        const lines = dataBlock.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+        // Pour simplifier : on découpe quand on détecte un pattern de date JD
+        // (ex: "2460677.916666667 = A.D. 2025-Jan-02 10:00:00.0000 TDB")
+        let chunks = [];
+        let currentChunk = [];
+
+        lines.forEach(line => {
+          // Si la ligne ressemble à un début de bloc (contient "= A.D.")
+          // on démarre un nouveau chunk
+          if (line.includes('= A.D.')) {
+            // push le chunk précédent s'il existe
+            if (currentChunk.length > 0) chunks.push(currentChunk);
+            // nouveau chunk
+            currentChunk = [line];
+          } else {
+            // on ajoute au chunk courant
+            currentChunk.push(line);
+          }
+        });
+        // push le dernier chunk
+        if (currentChunk.length > 0) chunks.push(currentChunk);
+
+        // 4. Parser chaque chunk pour en extraire les valeurs
+        const parsedData = chunks.map(ch => {
+          // ch[0] ressemble à :
+          // "2460677.916666667 = A.D. 2025-Jan-02 10:00:00.0000 TDB"
+          const [jdPart, datePart] = ch[0].split('=').map(x => x.trim());
+          const julianDay = jdPart; // ex: "2460677.916666667"
+          const dateTDB = datePart.replace('TDB', '').trim(); 
+          // ex: "A.D. 2025-Jan-02 10:00:00.0000"
+
+          // ch[1] : "X = 5.766643000313046E+09 Y =-1.540739873910786E+10 Z =-1.279671229111096E+10"
+          // on va repérer X, Y, Z
+          const xyzLine = ch.find(l => l.startsWith('X =') || l.startsWith('X='));
+          const vxvyvzLine = ch.find(l => l.startsWith('VX='));
+          const ltrgrrLine = ch.find(l => l.startsWith('LT='));
+
+          // petite fonction de parsing d'un bloc "KEY= valeur"
+          function parseTriplet(lineStr, keys = ['X', 'Y', 'Z']) {
+            let obj = {};
+            if (!lineStr) return obj;
+            // on coupe sur les espaces "key = value"
+            // ou on utilise une regexp
+            keys.forEach(k => {
+              const regex = new RegExp(`${k}\\s*=\\s*([+\\-0-9.E]+)`);
+              const match = lineStr.match(regex);
+              if (match) {
+                obj[k] = match[1];
+              }
+            });
+            return obj;
+          }
+
+          const xyz = parseTriplet(xyzLine, ['X', 'Y', 'Z']);
+          const vxyz = parseTriplet(vxvyvzLine, ['VX', 'VY', 'VZ']);
+          const others = parseTriplet(ltrgrrLine, ['LT', 'RG', 'RR']);
+
+          return {
+            julianDay,
+            dateTDB,
+            ...xyz,
+            ...vxyz,
+            ...others
+          };
+        });
+
+        // 5. Générer un tableau HTML pour afficher ces données
+        let htmlTable = `
+          <table>
+            <thead>
+              <tr>
+                <th>Date TDB (JD)</th>
+                <th>Date TDB (calendaire)</th>
+                <th>X (km)</th>
+                <th>Y (km)</th>
+                <th>Z (km)</th>
+                <th>VX (km/s)</th>
+                <th>VY (km/s)</th>
+                <th>VZ (km/s)</th>
+                <th>LT (s)</th>
+                <th>RG (km)</th>
+                <th>RR (km/s)</th>
+              </tr>
+            </thead>
+            <tbody>
         `;
-        tableBody.appendChild(tr);
-      });
-    }
+
+        parsedData.forEach(row => {
+          htmlTable += `
+            <tr>
+              <td class="timestamp">${row.julianDay}</td>
+              <td class="timestamp">${row.dateTDB}</td>
+              <td>${row.X || ''}</td>
+              <td>${row.Y || ''}</td>
+              <td>${row.Z || ''}</td>
+              <td>${row.VX || ''}</td>
+              <td>${row.VY || ''}</td>
+              <td>${row.VZ || ''}</td>
+              <td>${row.LT || ''}</td>
+              <td>${row.RG || ''}</td>
+              <td>${row.RR || ''}</td>
+            </tr>
+          `;
+        });
+
+        htmlTable += `</tbody></table>`;
+
+        // 6. Insertion dans le container
+        container.innerHTML = htmlTable;
+
+      } catch (error) {
+        // Affichage d'un message d'erreur si besoin
+        container.innerHTML = `<p style="color:red;">Erreur lors du chargement ou parsing des données : ${error}</p>`;
+        console.error(error);
+      }
+    });
   </script>
 </body>
 </html>
