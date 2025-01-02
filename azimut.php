@@ -10,9 +10,12 @@ $site_coord = $_GET['SITE_COORD'];
 // Récupérer le paramètre FULL, par défaut 'NO'
 $full = isset($_GET['FULL']) && $_GET['FULL'] === 'YES' ? 'YES' : 'NO';
 
+// Définir le fuseau horaire à UTC/GMT
+date_default_timezone_set('UTC');
+
 // Calcul des heures dynamiques
-$start_time = date('Y-m-d H:i:s');
-$stop_time = date('Y-m-d H:i:s', strtotime('+15 minutes'));
+$start_time = date('Y-m-d H:i:s', strtotime('-1 hour'));
+$stop_time = date('Y-m-d H:i:s', strtotime('+1 hour'));
 
 // Construire l'URL de l'API
 $url = "https://ssd.jpl.nasa.gov/horizons_batch.cgi?batch=1"
