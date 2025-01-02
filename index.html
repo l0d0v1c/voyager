@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Voyager 2 AR Demo</title>
+  <title>Voyager 2 AR + iOS Permission</title>
   <style>
     /* ----------- Style principal ----------- */
     html, body {
@@ -24,7 +24,6 @@
     }
 
     #scene {
-      /* Un container plein écran pour "l'affichage AR" */
       width: 100vw;
       height: 100vh;
       position: relative;
@@ -39,21 +38,19 @@
       background: none;
       border: 2px solid red;
       border-radius: 50%;
-      transform: translate(-20px, -20px); /* pour centrer sur son "point" */
-      pointer-events: none; /* on ne veut pas la cliquer */
+      transform: translate(-20px, -20px);
+      pointer-events: none;
     }
     #target::before, #target::after {
       content: '';
       position: absolute;
       background: red;
     }
-    /* Barre horizontale de la croix */
     #target::before {
       top: 50%; left: 0;
       width: 100%; height: 2px;
       transform: translateY(-50%);
     }
-    /* Barre verticale de la croix */
     #target::after {
       left: 50%; top: 0;
       width: 2px; height: 100%;
@@ -72,40 +69,53 @@
       margin: 0;
       line-height: 1.4em;
     }
+
+    /* Bouton iOS */
+    #btn-orientation {
+      position: absolute;
+      top: 50px; left: 50%; transform: translateX(-50%);
+      z-index: 999;
+      font-size: 16px;
+      padding: 8px 16px;
+      background: #fff;
+      border: 1px solid #ccc;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <header>
-    <h2>Voyager 2 AR Demo (simplifié)</h2>
+    <h2>Voyager 2 AR Demo (avec permission iOS)</h2>
   </header>
+
+  <!-- Bouton pour autoriser l'orientation iOS -->
+  <button id="btn-orientation">Autoriser l'Orientation (iOS)</button>
 
   <!-- Zone "scène" -->
   <div id="scene">
-    <!-- La croix rouge qui représente la direction vers Voyager 2 -->
+    <!-- La croix rouge représentant la direction de Voyager 2 -->
     <div id="target"></div>
   </div>
 
   <!-- Zone d'infos en bas -->
   <div id="info">
-    <p><strong>Orientation téléphone</strong> (approx) : <span id="orient-data">-</span></p>
+    <p><strong>Orientation téléphone</strong> : <span id="orient-data">En attente...</span></p>
     <p><strong>Position phone (lat, lon, alt)</strong> : <span id="gps-data">En attente…</span></p>
     <p><strong>Position Voyager 2 (Ecl. J2000)</strong> : <span id="v2-data">?</span></p>
   </div>
 
   <script>
     /***********************************************
-     *         1) Utilitaires math
+     * 0) Constantes / utilitaires
      ***********************************************/
-    const deg2rad = Math.PI / 180;
-    const rad2deg = 180 / Math.PI;
+    const deg2rad = Math.PI / 180.0;
 
     // Conversion géodésique -> ECEF -> Ecliptique (approx.)
-    // (même fonction que précédemment, simplifiée)
     function geodeticToEcliptic(latDeg, lonDeg, altMeters = 0) {
       const lat = latDeg * deg2rad;
       const lon = lonDeg * deg2rad;
-      const a = 6378.137;             // demi-grand axe en km
-      const e2 = 6.69437999014e-3;
+      const a = 6378.137;          // demi-grand axe
+      const e2 = 6.69437999014e-3; // excentricité²
       const altKm = altMeters / 1000;
 
       const sinLat = Math.sin(lat);
@@ -117,7 +127,7 @@
       const yECEF = (N + altKm) * cosLat * Math.sin(lon);
       const zECEF = ((1 - e2) * N + altKm) * sinLat;
 
-      // Rotation ~ -23.4393° autour de X pour passer en Ecliptique J2000
+      // Rotation ~ -23.4393° autour de X pour Ecliptique
       const eps = -23.4393 * deg2rad;
       const cosEps = Math.cos(eps);
       const sinEps = Math.sin(eps);
@@ -129,40 +139,40 @@
       return { x: xEcl, y: yEcl, z: zEcl };
     }
 
-    // Module vectoriel basique
     const Vec3 = {
       sub: (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }),
       length: (v) => Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z),
       normalize: (v) => {
         const len = Vec3.length(v);
-        return (len > 0) ? { x: v.x/len, y: v.y/len, z: v.z/len } : { x:0, y:0, z:0 };
-      }
+        if (len === 0) return { x: 0, y: 0, z: 0 };
+        return { x: v.x/len, y: v.y/len, z: v.z/len };
+      },
     };
 
     /***********************************************
-     *   2) Récupération des données Voyager 2
+     * 1) Récupération position Voyager 2
      ***********************************************/
-    let v2PosEcl = null;  // position 3D du vaisseau (ex: X,Y,Z) en Ecliptique J2000
+    let v2PosEcl = null;
+
     async function fetchVoyagerPosition() {
-      // On va ne récupérer qu'un unique point (par exemple le 1er) dans l’exemple.
-      // Sinon, on peut aussi récupérer la moyenne si on veut un instant précis.
       try {
         const resp = await fetch('https://voyager.org.men/voyager2.php');
         const text = await resp.text();
+
         // Extraction $$SOE / $$EOE
-        const soeIndex = text.indexOf('$$SOE');
-        const eoeIndex = text.indexOf('$$EOE');
-        if (soeIndex < 0 || eoeIndex < 0) throw new Error("Bloc $$SOE/$$EOE non trouvé");
-        const dataBlock = text.substring(soeIndex + 5, eoeIndex).trim();
+        const soeIdx = text.indexOf('$$SOE');
+        const eoeIdx = text.indexOf('$$EOE');
+        if (soeIdx < 0 || eoeIdx < 0) throw new Error("Bloc $$SOE/$$EOE non trouvé.");
+
+        const dataBlock = text.substring(soeIdx + 5, eoeIdx).trim();
         const lines = dataBlock.split('\n').map(l => l.trim()).filter(l => l);
-        
-        // On prend le PREMIER chunk (celui du 1er timestamp)
+
+        // On prend le PREMIER chunk
         let firstChunk = [];
         let inChunk = false;
         for (const line of lines) {
           if (line.includes('= A.D.')) {
-            // début du chunk
-            if (inChunk) break; // on sort si on avait déjà un chunk
+            if (inChunk) break;
             firstChunk.push(line);
             inChunk = true;
           } else if (inChunk) {
@@ -170,147 +180,130 @@
           }
         }
 
-        // Parse de ce chunk
-        function parseTriplet(lineStr, keys=['X','Y','Z']) {
+        // Petite fonction de parsing
+        function parseTriplet(str, keys=['X','Y','Z']) {
           const out = {};
-          for (let k of keys) {
+          keys.forEach(k => {
             const re = new RegExp(`${k}\\s*=\\s*([+\\-0-9.E]+)`);
-            const m = lineStr.match(re);
-            if (m) {
-              out[k] = parseFloat(m[1]);
-            }
-          }
+            const m = str.match(re);
+            if (m) out[k] = parseFloat(m[1]);
+          });
           return out;
         }
 
         const xyzLine = firstChunk.find(l => l.startsWith('X =') || l.startsWith('X='));
         if (!xyzLine) throw new Error("Impossible de trouver la ligne X= ... Y= ... Z=");
+        const xyz = parseTriplet(xyzLine);
 
-        const xyz = parseTriplet(xyzLine, ['X','Y','Z']);
-        // On stocke
         v2PosEcl = { x: xyz.X, y: xyz.Y, z: xyz.Z };
-
         document.getElementById('v2-data').textContent = 
           `(${xyz.X.toExponential(3)}, ${xyz.Y.toExponential(3)}, ${xyz.Z.toExponential(3)}) km`;
-        
       } catch(e) {
         console.error(e);
-        document.getElementById('v2-data').textContent = `Erreur : ${e}`;
+        document.getElementById('v2-data').textContent = "Erreur : " + e;
       }
     }
 
     /***********************************************
-     *     3) Récupération Position + Orientation
+     * 2) Position & Orientation du téléphone
      ***********************************************/
-    let phonePosEcl = { x:0, y:0, z:0 };  // position du phone en ecliptique
+    let phonePosEcl = { x:0, y:0, z:0 }; // position en Ecliptique
     let phoneHeading = 0;  // alpha
     let phonePitch = 0;    // beta
     let phoneRoll = 0;     // gamma
 
-    // 3.1) Géolocalisation
+    // 2.1) Géolocalisation
     navigator.geolocation?.getCurrentPosition(
       (pos) => {
         const { latitude, longitude, altitude } = pos.coords;
         const altOk = altitude || 0;
         phonePosEcl = geodeticToEcliptic(latitude, longitude, altOk);
-        
-        // Affichage
         document.getElementById('gps-data').textContent =
           `${latitude.toFixed(5)}°, ${longitude.toFixed(5)}°, alt=${altOk.toFixed(1)} m`;
       },
       (err) => {
-        console.warn("Geo non dispo", err);
-        document.getElementById('gps-data').textContent = "Géoloc refusée ou indisponible.";
+        console.warn("Géoloc refusée ou indisponible.", err);
+        document.getElementById('gps-data').textContent = "Géoloc refusée ou indispo.";
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
 
-    // 3.2) Orientation (DeviceOrientationEvent)
-    window.addEventListener('deviceorientation', (event) => {
-      // alpha : rotation autour de Z (0° quand la boussole pointe le Nord)
-      // beta : rotation autour de X (inclinaison avant/arrière)
-      // gamma : rotation autour de Y (inclinaison gauche/droite)
-      phoneHeading = event.alpha || 0;
-      phonePitch = event.beta || 0;
-      phoneRoll = event.gamma || 0;
+    // 2.2) Fonctions pour demander la permission (iOS >= 13)
+    function startDeviceOrientation() {
+      // On écoute l'orientation
+      window.addEventListener('deviceorientation', (event) => {
+        phoneHeading = event.alpha || 0;
+        phonePitch = event.beta || 0;
+        phoneRoll = event.gamma || 0;
 
-      // Mise à jour de l'UI
-      document.getElementById('orient-data').textContent =
-        `alpha=${phoneHeading.toFixed(1)}, beta=${phonePitch.toFixed(1)}, gamma=${phoneRoll.toFixed(1)}`;
-    }, true);
+        document.getElementById('orient-data').textContent =
+          `alpha=${phoneHeading.toFixed(1)}, beta=${phonePitch.toFixed(1)}, gamma=${phoneRoll.toFixed(1)}`;
+      }, true);
+    }
+
+    async function requestOrientationPermission() {
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const resp = await DeviceOrientationEvent.requestPermission();
+          if (resp === 'granted') {
+            startDeviceOrientation();
+            alert("Orientation autorisée !");
+          } else {
+            alert("Permission refusée ou ignorée.");
+          }
+        } catch(e) {
+          console.error("Erreur requestPermission:", e);
+        }
+      } else {
+        // Sur Android / iOS < 13
+        startDeviceOrientation();
+      }
+    }
 
     /***********************************************
-     *   4) Mise à jour de la “cible” (croix)
+     * 3) “Réalité augmentée” simplifiée
      ***********************************************/
     const targetEl = document.getElementById('target');
     const sceneEl = document.getElementById('scene');
 
-    // Boucle d'animation (~60 fps)
     function animate() {
       requestAnimationFrame(animate);
+      if (!v2PosEcl) return; // On attend la pos V2
 
-      if (!v2PosEcl) {
-        // on attend d'avoir la pos de V2
-        return;
-      }
-
-      // 4.1) Calcul du vecteur "phone->Voyager2"
-      const phoneToV2 = Vec3.sub(v2PosEcl, phonePosEcl);  
-      // => vecteur dans le référentiel Ecliptique J2000
-
-      // 4.2) On veut approx. un azimut/élévation LOCAUX
-      //     Normalement, il faudrait convertir Ecliptique-> local tangent plane
-      //     puis en fct de l'azimut du phoneHeading, etc. => On fait court
-      // On va "tricher" : on suppose que phoneHeading = 0 => pointe vers l'axe +Y Ecliptique,
-      // phonePitch = 0 => horizontale, etc. C’est un gros raccourci, mais pour la démo.
-
-      // Normaliser phoneToV2
+      // 3.1) Vecteur phone -> Voyager2
+      const phoneToV2 = Vec3.sub(v2PosEcl, phonePosEcl);
       const dir = Vec3.normalize(phoneToV2);
 
-      // Petit “hack” : on va convertir ce vecteur 3D en angles polaires "az, el"
-      // dans un repère (X ecl, Y ecl, Z ecl).
-      //   az = atan2(X, Y)  (0° = direction +Y, tourne dans le sens trig sur X)
-      //   el = asin(Z) approximatif
-      const az = Math.atan2(dir.x, dir.y);  // rad
-      const el = Math.asin(dir.z);          // rad
+      // 3.2) Az, El dans repère Ecliptique
+      // az = atan2(X, Y) ; 0° = +Y
+      // el = asin(Z)
+      const az = Math.atan2(dir.x, dir.y);
+      const el = Math.asin(dir.z);
 
-      // 4.3) On regarde l'orientation du téléphone
-      // phoneHeading => direction “N” sur 0°, or nous on a 0° => +Y eclip
-      // => angle relatif = (az - heading)
-      // Convertir heading en radians
-      const headingRad = phoneHeading * deg2rad;
-      const pitchRad   = phonePitch  * deg2rad;
+      // 3.3) Orientation du phone
+      const headingRad = phoneHeading * deg2rad; // alpha
+      const pitchRad   = phonePitch  * deg2rad; // beta
 
       // Diff d'azimut
       let relAz = az - headingRad;
-      // Diff d'élévation => on suppose pitch=0 => horizontal
-      let relEl = el - (-pitchRad); // la pitch positive penche vers le bas sur la plupart des appareils
-
-      // On borne le relAz dans [-pi, pi]
       if (relAz > Math.PI) relAz -= 2*Math.PI;
       if (relAz < -Math.PI) relAz += 2*Math.PI;
 
-      // 4.4) Projection 2D
-      // On suppose un FOV horizontal de ~60° (0.6 rad) et vertical ~45° (0.45 rad)
-      // => tout ce qui dépasse, la cible sort de l'écran.
-      const FOVx = 0.6;   // radians
-      const FOVy = 0.45;  // radians
+      // Diff d'élévation (simplifiée)
+      let relEl = el - (-pitchRad); // pitch>0 => penché vers le bas
 
-      // Ratio de la position sur l'écran : x = (relAz / (FOVx/2)), y = (relEl / (FOVy/2))
-      // => x, y dans [-1, 1] pour être à l'intérieur de l’écran
-      const rx = (relAz / (FOVx/2));
-      const ry = -(relEl / (FOVy/2)); // on inverse Y pour correspondre au repère écran (en haut = 0)
+      // 3.4) Projection 2D simplifiée
+      const FOVx = 0.6;   // ~60° horizontaux
+      const FOVy = 0.45;  // ~45° verticaux
+      const rx = relAz / (FOVx/2);
+      const ry = -(relEl / (FOVy/2));
 
       const scrW = sceneEl.clientWidth;
       const scrH = sceneEl.clientHeight;
+      let px = scrW/2 + (scrW/2)*rx;
+      let py = scrH/2 + (scrH/2)*ry;
 
-      // On place la croix
-      // si rx=0, on est au centre horizontal; si rx=1, on est à la droite de l’écran
-      let px = scrW/2 + (scrW/2) * rx;
-      let py = scrH/2 + (scrH/2) * ry;
-
-      // On borne px, py dans [0, scrW],[0,scrH] pour éviter qu'elle disparaisse complètement
-      // (sinon, on pourrait la laisser “sortir” de l’écran)
+      // Borne la croix à l'écran
       if (px < 20) px = 20;
       if (px > scrW - 20) px = scrW - 20;
       if (py < 20) py = 20;
@@ -319,14 +312,16 @@
       targetEl.style.left = px + 'px';
       targetEl.style.top  = py + 'px';
     }
-
-    // Lance l’animation
     requestAnimationFrame(animate);
 
     /***********************************************
-     * 5) Récupération initiale
+     * 4) Initialisation
      ***********************************************/
-    fetchVoyagerPosition();
+    document.getElementById('btn-orientation').addEventListener('click', () => {
+      requestOrientationPermission();
+    });
+
+    fetchVoyagerPosition(); // Lance le fetch de la position de V2
   </script>
 </body>
 </html>
